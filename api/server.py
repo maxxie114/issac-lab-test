@@ -31,6 +31,7 @@ def set_simulation_running(running: bool):
 class PolicyRequest(BaseModel):
     instruction: str
     api_key: Optional[str] = None
+    access_code: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -62,6 +63,11 @@ async def update_policy(req: PolicyRequest):
         return {"error": "Simulation not initialized"}
 
     try:
+        # Check access code if one is configured on the server
+        server_code = os.environ.get("ACCESS_CODE", "")
+        if server_code and req.access_code != server_code:
+            return {"error": "Invalid access code"}
+
         from api.gemini import chat_with_gemini, configure_gemini
 
         api_key = req.api_key or os.environ.get("GEMINI_API_KEY")
