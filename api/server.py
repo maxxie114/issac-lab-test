@@ -47,6 +47,15 @@ async def get_state():
     return _fleet_manager.get_state()
 
 
+@app.post("/api/add-robot")
+async def add_robot():
+    if _fleet_manager is None:
+        return {"error": "Simulation not initialized"}
+    robot_id = _fleet_manager.add_robot()
+    await _broadcast({"type": "robot_added", "data": {"id": robot_id}})
+    return {"id": robot_id, "total_robots": _fleet_manager.num_robots}
+
+
 @app.post("/api/policy")
 async def update_policy(req: PolicyRequest):
     if _fleet_manager is None:

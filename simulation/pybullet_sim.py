@@ -166,6 +166,39 @@ class WarehouseSimulation:
                 "target": None,
             })
 
+    def add_robot(self, x=None, y=None):
+        """Add a new robot to the fleet at runtime."""
+        robot_colors = [
+            [1.0, 0.85, 0.0, 1], [0.0, 0.9, 0.9, 1], [1.0, 0.3, 0.7, 1],
+            [1.0, 0.5, 0.0, 1], [0.5, 0.5, 1.0, 1], [0.3, 1.0, 0.3, 1],
+            [0.8, 0.2, 0.2, 1], [0.9, 0.9, 0.9, 1], [0.6, 0.0, 0.8, 1],
+        ]
+        i = len(self.robot_ids)
+
+        if x is None or y is None:
+            if i < len(SPAWN_POSITIONS):
+                x, y = SPAWN_POSITIONS[i]
+            else:
+                x, y = -8.0 + (i % 4) * 1.5, -4.0 + (i // 4) * 2.0
+
+        color = robot_colors[i % len(robot_colors)]
+        col = p.createCollisionShape(p.GEOM_CYLINDER, radius=0.25, height=0.2)
+        vis = p.createVisualShape(p.GEOM_CYLINDER, radius=0.25, length=0.2,
+                                  rgbaColor=color)
+        robot_id = p.createMultiBody(
+            baseMass=1.0, baseCollisionShapeIndex=col,
+            baseVisualShapeIndex=vis, basePosition=[x, y, 0.15],
+        )
+        p.changeDynamics(robot_id, -1, linearDamping=0.9, angularDamping=0.9)
+
+        self.robot_ids.append(robot_id)
+        self.robot_states.append({
+            "id": i, "state": "idle", "carrying_item": False,
+            "deliveries": 0, "current_task": None, "target": None,
+        })
+        self.num_robots = len(self.robot_ids)
+        return i
+
     def generate_tasks(self, count=3):
         for _ in range(count):
             self.task_counter += 1

@@ -1,15 +1,21 @@
 # GeminiFleet - AI-Powered Multi-Robot Warehouse Simulator
 
-A multi-agent warehouse robot simulation built on **NVIDIA Isaac Sim** with **Google Gemini** natural language fleet control. Robots autonomously pick up and deliver items in a virtual warehouse, while a fleet manager controls behavior through plain English commands interpreted by Gemini AI.
+A multi-agent warehouse robot simulation built on **PyBullet** physics engine with **Google Gemini** natural language fleet control. Robots autonomously pick up and deliver items in a virtual warehouse, while a fleet manager controls behavior through plain English commands interpreted by Gemini AI.
+
+## Demo
+
+[![Demo Video](https://img.shields.io/badge/Demo-Watch%20on%20X-blue?style=for-the-badge&logo=x)](https://x.com/i/status/2022847149399249344)
+
+[Watch the demo video on X/Twitter](https://x.com/i/status/2022847149399249344)
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Local Machine (GPU)                        │
+│              Local Machine or Vultr VM                        │
 │  ┌─────────────┐    ┌──────────────┐    ┌────────────────┐  │
-│  │  Isaac Sim   │───▶│ Fleet Manager│◀───│ Policy Engine  │  │
-│  │  (3D Render) │    │ (Navigation) │    │ (Gemini API)   │  │
+│  │  PyBullet    │───▶│ Fleet Manager│◀───│ Policy Engine  │  │
+│  │  (Physics)   │    │ (Navigation) │    │ (Gemini API)   │  │
 │  └─────────────┘    └──────┬───────┘    └────────────────┘  │
 │                            │                                 │
 │                     ┌──────▼───────┐                        │
@@ -22,16 +28,6 @@ A multi-agent warehouse robot simulation built on **NVIDIA Isaac Sim** with **Go
 │                     │  (Browser)   │                        │
 │                     └──────────────┘                        │
 └──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│                  Vultr VM (No GPU)                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Docker: api_standalone.py                            │   │
-│  │  - FastAPI + Web Dashboard                            │   │
-│  │  - Standalone lightweight simulation                  │   │
-│  │  - Gemini policy chat                                 │   │
-│  └──────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
@@ -40,13 +36,13 @@ A multi-agent warehouse robot simulation built on **NVIDIA Isaac Sim** with **Go
 
 | Component | Requirement |
 |-----------|-------------|
-| **GPU** | NVIDIA RTX 4070+ (for Isaac Sim) |
+| **GPU** | None required (PyBullet runs on CPU) |
 | **Python** | 3.11 (required by Isaac Sim) |
 | **CUDA** | 12.x |
 | **OS** | Ubuntu 22.04 or Windows 10/11 |
 | **Gemini API Key** | [Get one here](https://aistudio.google.com/apikey) |
 
-### Option 1: Full Isaac Sim Mode (Local GPU)
+### Option 1: Run Locally
 
 ```bash
 # 1. Clone the repo
@@ -58,45 +54,26 @@ python3.11 -m venv .venv
 source .venv/bin/activate  # Linux
 # .venv\Scripts\activate   # Windows
 
-# 3. Install Isaac Sim (large download, ~12GB)
-pip install isaacsim
-
-# 4. Install web dependencies
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# 5. Set your Gemini API key
+# 4. Set your Gemini API key
 export GEMINI_API_KEY="your_key_here"
 
-# 6. Run!
+# 5. Run!
 python main.py
 ```
 
-Isaac Sim will open with the warehouse scene. Open http://localhost:8000 for the web dashboard.
+Open http://localhost:8000 for the web dashboard.
 
 **Command line options:**
 ```bash
-python main.py --headless          # No GUI (faster)
+python main.py --gui               # Show PyBullet 3D viewer
 python main.py --num-robots 6      # More robots (1-6)
 python main.py --port 8080         # Different port
-python main.py --no-prebuilt       # Build warehouse procedurally
 ```
 
-### Option 2: Standalone Mode (No GPU, for Vultr)
-
-```bash
-# 1. Install dependencies
-pip install -r requirements.txt
-
-# 2. Set Gemini API key
-export GEMINI_API_KEY="your_key_here"
-
-# 3. Run standalone
-python api_standalone.py
-```
-
-This runs a lightweight 2D simulation without Isaac Sim. Open http://localhost:8000.
-
-### Option 3: Docker on Vultr
+### Option 2: Docker on Vultr
 
 ```bash
 # 1. SSH into your Vultr VM
@@ -185,11 +162,12 @@ Type natural language commands in the chat panel to control robot behavior:
 
 ```
 geminifleet/
-├── main.py                  # Isaac Sim entry point (GPU mode)
-├── api_standalone.py        # Standalone entry point (no GPU)
+├── main.py                  # Main entry point (PyBullet + web server)
+├── api_standalone.py        # Lightweight standalone mode (no physics engine)
 ├── simulation/
-│   ├── warehouse.py         # Warehouse environment (Isaac Sim scene)
-│   ├── fleet.py             # Fleet manager (robot control + task assignment)
+│   ├── pybullet_sim.py      # PyBullet warehouse simulation
+│   ├── warehouse.py         # Warehouse environment (Isaac Sim scene, optional)
+│   ├── fleet.py             # Fleet manager (Isaac Sim mode, optional)
 │   └── policy.py            # Policy dataclass
 ├── api/
 │   ├── server.py            # FastAPI + WebSocket server
@@ -204,7 +182,7 @@ geminifleet/
 
 ## Technologies
 
-- **NVIDIA Isaac Sim** — Physics-based robot simulation with RTX rendering
+- **PyBullet** — Physics-based robot simulation (Bullet Physics engine)
 - **Google Gemini 2.0 Flash** — Natural language to policy parameter generation
 - **FastAPI + WebSocket** — Real-time web API
 - **HTML5 Canvas** — 2D dashboard visualization
@@ -212,10 +190,10 @@ geminifleet/
 
 ## How It Works
 
-1. **Warehouse Setup**: Isaac Sim loads a warehouse environment with shelves, pickup zones, and dropoff zones
-2. **Robot Fleet**: Jetbot robots are spawned and controlled via differential drive controllers
+1. **Warehouse Setup**: PyBullet creates a physics environment with walls, shelves, pickup zones, and dropoff stations
+2. **Robot Fleet**: Cylindrical robot bodies with collision shapes navigate the warehouse. New robots can be added at runtime
 3. **Task System**: Delivery tasks (pickup → dropoff) are generated and assigned to idle robots
-4. **Navigation**: Robots use `WheelBasePoseController` for autonomous waypoint navigation
+4. **Navigation**: Robots use kinematic control with priority-based collision avoidance to prevent deadlocks
 5. **Collision Avoidance**: Robots check distances and respond based on policy (wait/reroute/slow down)
 6. **Gemini AI**: Natural language commands are sent to Gemini, which returns JSON policy parameters
 7. **Real-time Dashboard**: WebSocket pushes simulation state to the browser at ~10Hz
@@ -224,9 +202,8 @@ geminifleet/
 
 | Mode | CPU | RAM | GPU | Storage | Cost |
 |------|-----|-----|-----|---------|------|
-| **Isaac Sim (local)** | 4+ cores | 16GB+ | RTX 4070+ | 20GB | Your machine |
-| **Vultr (web only)** | 1 vCPU | 1GB | None | 10GB | ~$5/mo |
-| **Brev (full cloud)** | 4+ cores | 16GB+ | A10G/L40S | 50GB | ~$1-3/hr |
+| **Local** | 1+ cores | 1GB+ | None | 500MB | Your machine |
+| **Vultr** | 1 vCPU | 1GB | None | 500MB | ~$5/mo |
 
 ## License
 
