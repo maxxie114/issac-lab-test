@@ -4,7 +4,11 @@ A multi-agent warehouse robot simulation built on **PyBullet** physics engine wi
 
 ![GeminiFleet Dashboard](Geminifleet.png)
 
-## Demo
+## Live Demo
+
+**[Try it live → http://207.148.9.252:8000](http://207.148.9.252:8000)**
+
+## Demo Video
 
 [![Demo Video](https://img.shields.io/badge/Demo-Watch%20on%20X-blue?style=for-the-badge&logo=x)](https://x.com/i/status/2022847149399249344)
 
