@@ -16,22 +16,30 @@ Available parameters you can set:
 - zone_preference (string): Preferred warehouse zone. Options: "north", "south", "east", "west", "balanced"
 - max_concurrent_tasks (int 1-3): Max tasks per robot
 
+Special action — unstuck robots:
+- unstuck_robots (list of robot IDs, or "all"): Rescue stuck robots by teleporting them to a clear position and cancelling their current task. Use this when the manager reports robots are stuck, blocked, or not moving. You can specify specific robot IDs like [0, 2] or use "all" to unstick every robot that appears stuck near shelves.
+
 Current warehouse layout:
 - Pickup zones (blue) on the west/left side
 - Dropoff zones (green) on the east/right side
-- Shelf racks in the center
+- Shelf racks in the center — robots can get stuck on these!
 - Robots start from the far west
 
 Rules:
 1. Only include parameters that should CHANGE based on the instruction
 2. Include an "explanation" field with a brief reason for your choices
 3. Respond with ONLY valid JSON, no markdown formatting
+4. If a robot appears stuck (same position for a long time, or manager says it's stuck), use unstuck_robots to fix it
+5. You can combine unstuck_robots with policy changes in the same response
 
 Example instruction: "Make the robots more careful"
 Example response: {"speed": 0.15, "safety_margin": 2.0, "congestion_response": "wait", "explanation": "Reduced speed and increased safety margins for more cautious operation"}
 
-Example instruction: "Speed things up, we're behind schedule"
-Example response: {"speed": 0.45, "safety_margin": 0.5, "congestion_response": "slow_down", "explanation": "Maximized speed and reduced safety margins for faster throughput"}
+Example instruction: "Robot 2 is stuck, help it"
+Example response: {"unstuck_robots": [2], "explanation": "Unsticking Robot 2 — it will be teleported to a clear area and reassigned a new task"}
+
+Example instruction: "All robots are stuck, fix them and slow down"
+Example response: {"unstuck_robots": "all", "speed": 0.15, "safety_margin": 2.0, "explanation": "Unsticking all stuck robots and reducing speed to prevent future collisions with shelves"}
 """
 
 
@@ -83,7 +91,8 @@ def chat_with_gemini(instruction: str, current_policy: dict, fleet_state: dict) 
         f"{fleet_state['stats']['collisions_avoided']} collisions avoided."
     )
     robot_summary = ", ".join(
-        f"Robot {r['id']}: {r['state']}" for r in fleet_state["robots"]
+        f"Robot {r['id']}: {r['state']} at ({r['x']:.1f}, {r['y']:.1f})"
+        for r in fleet_state["robots"]
     )
 
     prompt = (

@@ -63,12 +63,15 @@ class StandaloneFleetManager:
         self.pending_tasks = 8
         self.num_robots = num_robots
         self.task_counter = 0
+        self.paused = True
 
         spawns = [[-12, -8], [-12, -3], [-12, 2], [-12, 7]]
         for i in range(min(num_robots, len(spawns))):
             self.robots.append(StandaloneRobot(i, spawns[i][0], spawns[i][1]))
 
     def step(self):
+        if self.paused:
+            return
         self.total_steps += 1
         for r in self.robots:
             if r.state == "idle" and self.pending_tasks > 0:
@@ -109,6 +112,38 @@ class StandaloneFleetManager:
                 if d < self.policy.safety_margin and d > 0:
                     self.collisions_avoided += 1
 
+    def unstuck_robot(self, robot_id):
+        if robot_id < 0 or robot_id >= len(self.robots):
+            return False
+        r = self.robots[robot_id]
+        r.state = "idle"
+        r.carrying_item = False
+        r.target = None
+        r.task_id = None
+        self.pending_tasks += 1
+        spawns = [[-12, -8], [-12, -3], [-12, 2], [-12, 7]]
+        r.x = spawns[robot_id % len(spawns)][0]
+        r.y = spawns[robot_id % len(spawns)][1]
+        return True
+
+    def unstuck_all(self):
+        unstuck = []
+        for r in self.robots:
+            if r.state != "idle":
+                self.unstuck_robot(r.id)
+                unstuck.append(r.id)
+        return unstuck
+
+    def add_robot(self, x=None, y=None):
+        i = len(self.robots)
+        if x is None:
+            x = -12
+        if y is None:
+            y = -8 + i * 5
+        self.robots.append(StandaloneRobot(i, x, y))
+        self.num_robots = len(self.robots)
+        return i
+
     def update_policy(self, params):
         old = self.policy.to_dict()
         self.policy.update(params)
@@ -119,6 +154,7 @@ class StandaloneFleetManager:
         return {
             "robots": [r.to_dict() for r in self.robots],
             "policy": self.policy.to_dict(),
+            "paused": self.paused,
             "stats": {
                 "total_deliveries": self.total_deliveries,
                 "total_steps": self.total_steps,

@@ -56,6 +56,7 @@ class WarehouseSimulation:
         self.total_deliveries = 0
         self.total_steps = 0
         self.collisions_avoided = 0
+        self.paused = True  # Start paused — user must click Start
         self._setup()
 
     def _setup(self):
@@ -212,6 +213,8 @@ class WarehouseSimulation:
 
     def step(self):
         """Advance simulation by one logical step (~4 physics substeps)."""
+        if self.paused:
+            return
         self.total_steps += 1
 
         # Assign tasks to idle robots
@@ -329,6 +332,63 @@ class WarehouseSimulation:
             rs["target"] = None
             rs["state"] = "idle"
 
+    def unstuck_robot(self, robot_id):
+        """Unstick a robot by cancelling its task and teleporting to a clear spot."""
+        if robot_id < 0 or robot_id >= len(self.robot_states):
+            return False
+
+        rs = self.robot_states[robot_id]
+
+        # Put current task back in the queue
+        if rs["current_task"] is not None:
+            self.task_queue.append(rs["current_task"])
+
+        # Reset robot state
+        rs["state"] = "idle"
+        rs["carrying_item"] = False
+        rs["current_task"] = None
+        rs["target"] = None
+
+        # Find a clear spawn position (away from other robots)
+        candidates = list(SPAWN_POSITIONS) + [(-7.0, -2.5), (-7.0, 2.5), (-6.0, 0.0)]
+        best_pos = candidates[0]
+        best_min_dist = -1
+
+        for cx, cy in candidates:
+            min_dist = float('inf')
+            for j, rid in enumerate(self.robot_ids):
+                if j == robot_id:
+                    continue
+                other_pos = p.getBasePositionAndOrientation(rid)[0]
+                d = math.sqrt((cx - other_pos[0]) ** 2 + (cy - other_pos[1]) ** 2)
+                min_dist = min(min_dist, d)
+            if min_dist > best_min_dist:
+                best_min_dist = min_dist
+                best_pos = (cx, cy)
+
+        # Teleport the robot
+        quat = p.getQuaternionFromEuler([0, 0, 0])
+        p.resetBasePositionAndOrientation(
+            self.robot_ids[robot_id], [best_pos[0], best_pos[1], 0.15], quat
+        )
+        return True
+
+    def unstuck_all(self):
+        """Unstick all robots that appear stuck (not idle but not making progress)."""
+        unstuck = []
+        for rs in self.robot_states:
+            if rs["state"] != "idle" and rs["target"] is not None:
+                rid = self.robot_ids[rs["id"]]
+                pos = p.getBasePositionAndOrientation(rid)[0]
+                # Check if robot is very close to a shelf (likely stuck)
+                for sx, sy in SHELF_POSITIONS:
+                    d = math.sqrt((pos[0] - sx) ** 2 + (pos[1] - sy) ** 2)
+                    if d < 1.0:  # Within 1m of a shelf — likely stuck
+                        self.unstuck_robot(rs["id"])
+                        unstuck.append(rs["id"])
+                        break
+        return unstuck
+
     def update_policy(self, params):
         old = self.policy.to_dict()
         self.policy.update(params)
@@ -352,6 +412,7 @@ class WarehouseSimulation:
         return {
             "robots": robots,
             "policy": self.policy.to_dict(),
+            "paused": self.paused,
             "stats": {
                 "total_deliveries": self.total_deliveries,
                 "total_steps": self.total_steps,

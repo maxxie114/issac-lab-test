@@ -16,6 +16,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0e1a; colo
 .header .status { font-size: 12px; color: #64748b; }
 .header .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 4px; animation: pulse 2s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.header .sim-controls { display: flex; gap: 8px; margin-left: 16px; }
+.sim-btn { border: none; border-radius: 6px; padding: 6px 16px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+.sim-btn.start { background: #22c55e; color: #052e16; }
+.sim-btn.start:hover { background: #16a34a; }
+.sim-btn.stop { background: #ef4444; color: #fff; }
+.sim-btn.stop:hover { background: #dc2626; }
 .header .stats { margin-left: auto; display: flex; gap: 16px; font-size: 12px; }
 .header .stat-value { font-weight: 700; font-size: 15px; color: #f1f5f9; }
 .header .stat-label { color: #64748b; font-size: 10px; }
@@ -23,6 +29,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0e1a; colo
 /* Canvas area */
 .canvas-area { position: relative; background: #0f1629; overflow: hidden; }
 canvas { width: 100%; height: 100%; }
+.paused-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 10; }
+.paused-overlay span { font-size: 48px; font-weight: 800; color: #f59e0b; letter-spacing: 8px; text-shadow: 0 2px 20px rgba(245,158,11,0.4); }
 
 /* Sidebar — two-panel layout: top info (scrollable, shrinkable) + bottom chat (priority) */
 .sidebar { background: #111827; border-left: 1px solid #1e293b; display: flex; flex-direction: column; overflow: hidden; }
@@ -99,6 +107,9 @@ canvas { width: 100%; height: 100%; }
   <div class="header">
     <h1>GeminiFleet</h1>
     <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting...</span></span>
+    <div class="sim-controls">
+      <button class="sim-btn start" id="simToggleBtn" onclick="toggleSimulation()">Start</button>
+    </div>
     <div class="stats">
       <div><div class="stat-value" id="statDeliveries">0</div><div class="stat-label">Deliveries</div></div>
       <div><div class="stat-value" id="statPending">0</div><div class="stat-label">Pending</div></div>
@@ -110,6 +121,7 @@ canvas { width: 100%; height: 100%; }
   <!-- Canvas -->
   <div class="canvas-area">
     <canvas id="simCanvas"></canvas>
+    <div class="paused-overlay" id="pausedOverlay"><span>PAUSED</span></div>
   </div>
 
   <!-- Sidebar -->
@@ -119,7 +131,10 @@ canvas { width: 100%; height: 100%; }
         <h3>Robots</h3>
         <div class="section-content">
           <div class="robot-list" id="robotList"></div>
-          <button id="addRobotBtn" onclick="event.stopPropagation(); addRobot()" style="margin-top:6px;width:100%;background:#1e3a5f;color:#60a5fa;border:1px solid #2563eb;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Robot</button>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button id="addRobotBtn" onclick="event.stopPropagation(); addRobot()" style="flex:1;background:#1e3a5f;color:#60a5fa;border:1px solid #2563eb;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Robot</button>
+            <button id="unstuckBtn" onclick="event.stopPropagation(); unstuckAll()" style="flex:1;background:#713f12;color:#fbbf24;border:1px solid #f59e0b;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer;">Unstuck All</button>
+          </div>
         </div>
       </div>
       <div class="sidebar-section" onclick="this.classList.toggle('collapsed')">
@@ -151,7 +166,7 @@ canvas { width: 100%; height: 100%; }
         <input type="password" id="apiKey" placeholder="Your Gemini API key..." />
       </div>
       <div class="chat-messages" id="chatMessages">
-        <div class="chat-msg assistant">Welcome! Tell me how to manage the fleet. Try: "Make robots faster" or "Prioritize safety over speed"</div>
+        <div class="chat-msg assistant">Welcome! Click <b>Start</b> to begin the simulation. Tell me how to manage the fleet — try: "Make robots faster" or "Robot 2 is stuck, help it"</div>
       </div>
       <div class="chat-input-row">
         <input type="text" id="chatInput" placeholder="e.g. Make robots more cautious..." />
@@ -169,6 +184,7 @@ const ctx = canvas.getContext('2d');
 let latestState = null;
 let ws = null;
 let animFrame = null;
+let simulationPaused = true;
 
 // ── WebSocket ────────────────────────────────────────────────────────
 function connectWS() {
@@ -180,9 +196,27 @@ function connectWS() {
   };
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'state') latestState = msg.data;
+    if (msg.type === 'state') {
+      latestState = msg.data;
+      if (msg.data.paused !== undefined) updatePauseState(msg.data.paused);
+    }
     if (msg.type === 'policy_update') {
-      addChatMessage('assistant', msg.data.explanation, msg.data.changes);
+      let text = msg.data.explanation;
+      if (msg.data.unstuck && msg.data.unstuck.length > 0) {
+        text += `\nUnstuck robots: ${msg.data.unstuck.join(', ')}`;
+      }
+      addChatMessage('assistant', text, msg.data.changes);
+    }
+    if (msg.type === 'simulation_toggle') {
+      updatePauseState(msg.data.paused);
+    }
+    if (msg.type === 'unstuck') {
+      const ids = msg.data.robots;
+      if (ids.length > 0) {
+        addChatMessage('assistant', `Unstuck ${ids.length} robot(s): ${ids.join(', ')}`);
+      } else {
+        addChatMessage('assistant', 'No stuck robots detected.');
+      }
     }
   };
   ws.onclose = () => {
@@ -407,7 +441,11 @@ async function sendChat() {
     if (data.error) {
       addChatMessage('assistant', `Error: ${data.error}`);
     } else {
-      addChatMessage('assistant', data.explanation, data.changes);
+      let text = data.explanation;
+      if (data.unstuck && data.unstuck.length > 0) {
+        text += `\nUnstuck robots: ${data.unstuck.join(', ')}`;
+      }
+      addChatMessage('assistant', text, data.changes);
     }
   } catch (e) {
     addChatMessage('assistant', `Connection error: ${e.message}`);
@@ -425,6 +463,47 @@ async function addRobot() {
     if (data.error) { alert(data.error); return; }
     addChatMessage('assistant', `Robot ${data.id} added to the fleet. Total: ${data.total_robots} robots.`);
   } catch(e) { alert('Failed to add robot: ' + e.message); }
+}
+
+async function toggleSimulation() {
+  try {
+    const r = await fetch('/api/simulation/toggle', { method: 'POST' });
+    const data = await r.json();
+    if (data.error) { alert(data.error); return; }
+    updatePauseState(data.paused);
+  } catch(e) { alert('Failed to toggle simulation: ' + e.message); }
+}
+
+async function unstuckAll() {
+  try {
+    const r = await fetch('/api/unstuck', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await r.json();
+    if (data.error) { alert(data.error); return; }
+    if (data.unstuck && data.unstuck.length > 0) {
+      addChatMessage('assistant', `Unstuck ${data.unstuck.length} robot(s): ${data.unstuck.join(', ')}`);
+    } else {
+      addChatMessage('assistant', 'No stuck robots detected. You can also tell Gemini to unstuck a specific robot by ID.');
+    }
+  } catch(e) { alert('Failed to unstuck robots: ' + e.message); }
+}
+
+function updatePauseState(paused) {
+  simulationPaused = paused;
+  const btn = document.getElementById('simToggleBtn');
+  const overlay = document.getElementById('pausedOverlay');
+  if (paused) {
+    btn.textContent = 'Start';
+    btn.className = 'sim-btn start';
+    overlay.style.display = 'flex';
+  } else {
+    btn.textContent = 'Stop';
+    btn.className = 'sim-btn stop';
+    overlay.style.display = 'none';
+  }
 }
 
 // ── Init ─────────────────────────────────────────────────────────────

@@ -67,6 +67,17 @@ async def update_policy(req: PolicyRequest):
         result = chat_with_gemini(req.instruction, fleet_state["policy"], fleet_state)
 
         explanation = result.pop("explanation", "Policy updated")
+
+        # Handle unstuck action from Gemini
+        unstuck_ids = result.pop("unstuck_robots", None)
+        unstuck_results = []
+        if unstuck_ids == "all":
+            unstuck_results = _fleet_manager.unstuck_all()
+        elif isinstance(unstuck_ids, list):
+            for rid in unstuck_ids:
+                _fleet_manager.unstuck_robot(rid)
+                unstuck_results.append(rid)
+
         changes = _fleet_manager.update_policy(result)
 
         response = {
@@ -74,6 +85,8 @@ async def update_policy(req: PolicyRequest):
             "changes": changes,
             "new_policy": _fleet_manager.policy.to_dict(),
         }
+        if unstuck_results:
+            response["unstuck"] = unstuck_results
 
         # Log the message
         _message_log.append({"role": "user", "content": req.instruction})
@@ -88,6 +101,38 @@ async def update_policy(req: PolicyRequest):
         return {"error": "Gemini returned invalid JSON. Try rephrasing your instruction."}
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/api/simulation/toggle")
+async def toggle_simulation():
+    if _fleet_manager is None:
+        return {"error": "Simulation not initialized"}
+    _fleet_manager.paused = not _fleet_manager.paused
+    status = "paused" if _fleet_manager.paused else "running"
+    await _broadcast({"type": "simulation_toggle", "data": {"paused": _fleet_manager.paused}})
+    return {"paused": _fleet_manager.paused, "status": status}
+
+
+class UnstuckRequest(BaseModel):
+    robot_ids: list[int] | None = None  # None = unstuck all stuck robots
+
+
+@app.post("/api/unstuck")
+async def unstuck_robots(req: UnstuckRequest = None):
+    if _fleet_manager is None:
+        return {"error": "Simulation not initialized"}
+
+    if req and req.robot_ids:
+        results = []
+        for rid in req.robot_ids:
+            ok = _fleet_manager.unstuck_robot(rid)
+            results.append({"id": rid, "success": ok})
+        await _broadcast({"type": "unstuck", "data": {"robots": req.robot_ids}})
+        return {"unstuck": results}
+    else:
+        unstuck = _fleet_manager.unstuck_all()
+        await _broadcast({"type": "unstuck", "data": {"robots": unstuck}})
+        return {"unstuck": unstuck, "message": f"Unstuck {len(unstuck)} robots"}
 
 
 @app.post("/api/reset")
