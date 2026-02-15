@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,8 +29,7 @@ def set_simulation_running(running: bool):
 
 class PolicyRequest(BaseModel):
     instruction: str
-    api_key: Optional[str] = None
-    access_code: Optional[str] = None
+    api_key: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -63,18 +61,8 @@ async def update_policy(req: PolicyRequest):
         return {"error": "Simulation not initialized"}
 
     try:
-        # Check access code if one is configured on the server
-        server_code = os.environ.get("ACCESS_CODE", "")
-        if server_code and req.access_code != server_code:
-            return {"error": "Invalid access code"}
-
         from api.gemini import chat_with_gemini, configure_gemini
-
-        api_key = req.api_key or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            return {"error": "GEMINI_API_KEY not configured"}
-
-        configure_gemini(api_key)
+        configure_gemini(req.api_key)
         fleet_state = _fleet_manager.get_state()
         result = chat_with_gemini(req.instruction, fleet_state["policy"], fleet_state)
 
