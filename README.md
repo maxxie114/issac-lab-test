@@ -189,7 +189,7 @@ geminifleet/
 ## Technologies
 
 - **PyBullet** — Physics-based robot simulation (Bullet Physics engine)
-- **Google Gemini 2.0 Flash** — Natural language to policy parameter generation
+- **Google Gemini 3 Flash** — Natural language to policy parameter generation
 - **FastAPI + WebSocket** — Real-time web API
 - **HTML5 Canvas** — 2D dashboard visualization
 - **Docker** — Containerized deployment on Vultr
