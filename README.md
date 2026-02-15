@@ -2,6 +2,8 @@
 
 A multi-agent warehouse robot simulation built on **PyBullet** physics engine with **Google Gemini** natural language fleet control. Robots autonomously pick up and deliver items in a virtual warehouse, while a fleet manager controls behavior through plain English commands interpreted by Gemini AI.
 
+![GeminiFleet Dashboard](Geminifleet.png)
+
 ## Demo
 
 [![Demo Video](https://img.shields.io/badge/Demo-Watch%20on%20X-blue?style=for-the-badge&logo=x)](https://x.com/i/status/2022847149399249344)
