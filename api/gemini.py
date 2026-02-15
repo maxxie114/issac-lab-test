@@ -61,7 +61,7 @@ def generate_policy(instruction: str, current_policy: dict = None) -> dict:
     Returns:
         Dict with policy parameters and explanation
     """
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     context = ""
     if current_policy:
@@ -82,7 +82,7 @@ def generate_policy(instruction: str, current_policy: dict = None) -> dict:
 
 def chat_with_gemini(instruction: str, current_policy: dict, fleet_state: dict) -> dict:
     """Higher-level chat that includes fleet state context."""
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-3-flash-preview")
 
     state_summary = (
         f"Fleet has {fleet_state['stats']['num_robots']} robots, "
